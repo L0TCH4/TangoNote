@@ -3,6 +3,8 @@ package app.tango
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import org.json.JSONObject
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -20,6 +22,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Bridge.pending = selectedText(intent)
         Notifier.ensureChannel(this)
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -43,11 +46,24 @@ class MainActivity : AppCompatActivity() {
         wv.loadUrl("https://appassets.androidplatform.net/assets/index.html")
     }
 
+    private fun selectedText(i: Intent?): String? =
+        i?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()?.takeIf { it.isNotBlank() }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        selectedText(intent)?.let {
+            wv.evaluateJavascript("window.handleText&&handleText(" + JSONObject.quote(it) + ")", null)
+        }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() { if (wv.canGoBack()) wv.goBack() else super.onBackPressed() }
 }
 
 class Bridge(private val ctx: Context) {
+    companion object { @Volatile var pending: String? = null }
+    @JavascriptInterface fun pending(): String { val p = pending ?: ""; pending = null; return p }
     @JavascriptInterface fun sync(json: String) {
         ctx.getSharedPreferences("t", 0).edit().putString("due", json).apply()
     }
