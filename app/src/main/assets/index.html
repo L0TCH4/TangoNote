@@ -41,10 +41,11 @@ nav button.on{color:var(--ac)}
 <main>
 <section id="v-search">
 <h1>単語を調べる</h1>
+<div id="stk" class="sub" style="margin:-6px 0 12px"></div>
 <div class="card"><div class="row"><input id="q" placeholder="英単語を入力(例: resilient)" autocapitalize="none" autocomplete="off" spellcheck="false"><button id="go">調べる</button></div></div>
-<div class="card"><div class="sub">英文を入力すると、句ごとに分けて意味を表示します</div>
+<div class="card"><div class="sub">英文を入力すると、1単語ずつ(熟語・句動詞はまとめて)分けて意味を表示します</div>
 <textarea id="txt" rows="3" placeholder="例: She decided to give up smoking for her health." style="width:100%;margin:8px 0;font:inherit;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)"></textarea>
-<button id="sb" style="width:100%">句に分ける</button></div>
+<button id="sb" style="width:100%">分けて調べる</button></div>
 <div id="res"></div>
 </section>
 <section id="v-list" class="hide"><h1>単語帳</h1><div id="list"></div></section>
@@ -84,7 +85,14 @@ async function gem(prompt){
 }
 function renderSet(){const c=cfg();$("#key").value=c.key||"";$("#mdl").value=c.model||"";}
 const due=()=>words.filter(w=>w.due<=Date.now()).sort((a,b)=>a.due-b.due);
-function updBadge(){const n=due().length,b=$("#bd");b.textContent=n;b.classList.toggle("hide",!n)}
+const STK="tango.streak";
+function dstr(off){const d=new Date();d.setDate(d.getDate()-(off||0));return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function stLoad(){try{return JSON.parse(localStorage.getItem(STK)||"{}")}catch(e){return{}}}
+function streak(){const s=stLoad(),t=dstr(0);return{n:(s.last===t||s.last===dstr(1))?(s.count||0):0,best:s.best||0,done:s.last===t}}
+function stRecord(){const s=stLoad(),t=dstr(0);if(s.last===t)return;const n=(s.last===dstr(1)?(s.count||0):0)+1;try{localStorage.setItem(STK,JSON.stringify({last:t,count:n,best:Math.max(s.best||0,n)}))}catch(e){}}
+function stChip(){const k=streak();return "🔥 "+k.n+"日連続"+(k.done?" ・今日は復習済み ✓":" ・今日復習すると記録が"+(k.n?"伸びます":"始まります"))+(k.best>k.n?"(最長 "+k.best+"日)":"")}
+function updStk(){const e=$("#stk");if(e)e.textContent=stChip()}
+function updBadge(){const n=due().length,b=$("#bd");b.textContent=n;b.classList.toggle("hide",!n);updStk()}
 function show(t){
   for(const k of["search","list","rev","set"])$("#v-"+k).classList.toggle("hide",k!==t);
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));
@@ -115,14 +123,16 @@ function renderRes(){
   $("#res").innerHTML=`<div class="card"><div class="item"><div><div class="w">${esc(c.word)}</div><div class="sub">${esc(c.pron)} ${esc(c.pos)}</div></div><button class="g" id="sp">🔊</button></div>
   <ol>${c.meanings.map(m=>`<li>${esc(m)}</li>`).join("")}</ol>
   ${c.example?`<div class="ex"><div>${esc(c.example)}</div><div class="sub">${esc(c.example_ja)}</div></div>`:""}
-  <button id="add" style="width:100%;margin-top:14px" ${has?"disabled":""}>${has?"単語帳に追加済み":"単語帳に追加"}</button></div>`;
-  $("#sp").onclick=()=>speak(c.word);$("#add").onclick=add;
+  <button id="add" class="${has?"g":""}" style="width:100%;margin-top:14px">${has?"追加を取り消す":"単語帳に追加"}</button></div>`;
+  $("#sp").onclick=()=>speak(c.word);$("#add").onclick=has?()=>{removeWord(c.word);renderRes()}:add;
 }
 function add(){
   if(!cur||words.some(w=>w.word===cur.word))return;
+  const w=cur.word;
   words.push({...cur,stage:0,due:Date.now()+DAY,added:Date.now()});
   save();updBadge();
-  $("#res").innerHTML=`<div class="card c">「${esc(cur.word)}」を追加しました。初回の復習は明日です。</div>`;
+  $("#res").innerHTML=`<div class="card c">「${esc(w)}」を追加しました。初回の復習は明日です。<button class="g" id="undo" style="width:100%;margin-top:10px">追加を取り消す</button></div>`;
+  $("#undo").onclick=()=>{removeWord(w);$("#res").innerHTML=`<div class="card c sub">「${esc(w)}」の追加を取り消しました。</div>`};
   $("#q").value="";cur=null;
 }
 function renderList(){
@@ -132,16 +142,16 @@ function renderList(){
     const d=w.due<=Date.now()?"復習できます":Math.ceil((w.due-Date.now())/DAY)+"日後に復習";
     return `<div class="card item"><div><b>${esc(w.word)}</b> <span class="sub">${esc(w.meanings[0]||"")}</span>
     <div class="dots">${INT.map((_,i)=>`<i class="${i<w.stage?"f":""}"></i>`).join("")}</div><div class="sub">${d}</div></div>
-    <button class="x" data-w="${esc(w.word)}" aria-label="削除">×</button></div>`}).join("");
-  el.querySelectorAll(".x").forEach(b=>b.onclick=()=>{if(confirm("「"+b.dataset.w+"」を削除しますか?")){words=words.filter(w=>w.word!==b.dataset.w);save();updBadge();renderList()}});
+    <button class="g del" data-w="${esc(w.word)}" style="padding:8px 12px">削除</button></div>`}).join("");
+  el.querySelectorAll(".del").forEach(b=>b.onclick=()=>{if(confirm("「"+b.dataset.w+"」を削除しますか?")){words=words.filter(w=>w.word!==b.dataset.w);save();updBadge();renderList()}});
 }
 function renderRev(){
   const el=$("#rev"),d=due();
   if(!d.length){
     const nx=words.map(w=>w.due).sort((a,b)=>a-b)[0];
-    el.innerHTML=`<div class="card c">今日の復習は完了です 🎉<div class="sub" style="margin-top:6px">${nx?"次の復習: "+new Date(nx).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit"}):"単語を追加しましょう"}</div></div>`;return}
+    el.innerHTML=`<div class="sub c" style="margin-bottom:8px">${stChip()}</div><div class="card c">今日の復習は完了です 🎉<div class="sub" style="margin-top:6px">${nx?"次の復習: "+new Date(nx).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"numeric",minute:"2-digit"}):"単語を追加しましょう"}</div></div>`;return}
   revCard=d[0];const c=revCard;
-  el.innerHTML=`<div class="sub c">残り ${d.length} 語</div><div class="card c"><div class="w">${esc(c.word)}</div><div class="sub">${esc(c.pron)}</div>
+  el.innerHTML=`<div class="sub c">${stChip()}</div><div class="sub c">残り ${d.length} 語</div><div class="card c"><div class="w">${esc(c.word)}</div><div class="sub">${esc(c.pron)}</div>
   <button class="g" id="sp" style="margin-top:8px">🔊 発音</button>
   <div id="ans" class="hide" style="text-align:left;margin-top:12px"><ol>${c.meanings.map(m=>`<li>${esc(m)}</li>`).join("")}</ol>${c.example?`<div class="ex"><div>${esc(c.example)}</div><div class="sub">${esc(c.example_ja)}</div></div>`:""}</div>
   <button id="rv" style="width:100%;margin-top:14px">答えを見る</button>
@@ -156,7 +166,7 @@ function rate(r){
   else if(r===0)c.stage=0;
   c.due=r===0?Date.now()+10*60*1e3:Date.now()+INT[Math.max(0,Math.min(c.stage,INT.length)-(r===2?1:0))]*DAY*(r===1?.5:1);
   if(r===2)c.due=Date.now()+INT[Math.min(c.stage,INT.length)-1]*DAY;
-  save();updBadge();renderRev();
+  stRecord();save();updBadge();renderRev();
 }
 $("#sv").onclick=()=>{try{localStorage.setItem("tango.cfg",JSON.stringify({key:$("#key").value.trim(),model:$("#mdl").value.trim()}));$("#svm").textContent="保存しました"}catch(e){$("#svm").textContent="保存に失敗しました"}};
 $("#tn").onclick=()=>{try{window.Android?Android.test():alert("通知はアプリ版で使えます")}catch(e){}};
@@ -166,12 +176,13 @@ async function analyze(text){
   const res=$("#res"),btn=$("#sb");
   btn.disabled=true;res.innerHTML='<div class="card sub">分析しています…</div>';
   try{
-    const r=await gem(`次の英文を単語ごとに順番に分割し、日本語で解説してください。JSONのみ。形式: {"translation":"全文の日本語訳","phrases":[{"text":"英語の単語(原文のまま)","pron":"句全体のIPA発音記号(スラッシュ付き)","pos":"品詞または種類(日本語)","meanings":["意味"],"note":"補足(任意)"}]}。ただし、熟語と句動詞は1つの句として扱ってください。\n英文: ${text}`);
-    sent={text,tr:r.translation||"",items:(r.phrases||[]).map(p=>({word:String(p.text||"").trim().toLowerCase(),pron:p.pron||"",pos:p.pos||"",meanings:(p.meanings||[]).slice(0,3),example:text,example_ja:r.translation||"",note:p.note||""})).filter(p=>p.word)};
+    const r=await gem(`次の英文を原文の語順どおりに分割し、日本語で解説してください。JSONのみ。形式: {"translation":"全文の日本語訳","phrases":[{"text":"単語または熟語(原文のまま)","pron":"IPA発音記号(スラッシュ付き)","pos":"品詞または種類(日本語)","meanings":["意味"],"note":"補足(任意)"}]}。熟語・句動詞・慣用的な固定表現だけは1つの単位にまとめ、それ以外は冠詞や前置詞も含めて1単語ずつに分けてください。句読点は含めず、活用している語はnoteに原形を書いてください。\n英文: ${text}`);
+    sent={text,tr:r.translation||"",items:(r.phrases||[]).map(p=>({word:String(p.text||"").trim().toLowerCase(),pron:p.pron||"",pos:p.pos||"",meanings:(p.meanings||[]).slice(0,3),example:text,example_ja:r.translation||"",note:p.note||""})).filter((p,i,a)=>p.word&&a.findIndex(x=>x.word===p.word)===i)};
     renderSent();
   }catch(e){res.innerHTML=`<div class="card sub">分析に失敗しました(${esc(e.message)})。設定でAPIキーを確認してください。</div>`}
   btn.disabled=false;
 }
+function removeWord(w){words=words.filter(x=>x.word!==w);save();updBadge()}
 function addItem(p){
   if(words.some(w=>w.word===p.word))return;
   const {note,...r}=p;words.push({...r,stage:0,due:Date.now()+DAY,added:Date.now()});
@@ -180,9 +191,10 @@ function renderSent(){
   const s=sent;
   $("#res").innerHTML=`<div class="card"><div>${esc(s.text)}</div><div class="sub">${esc(s.tr)}</div></div>`+
   s.items.map((p,i)=>{const has=words.some(w=>w.word===p.word);
-    return `<div class="card item"><div><b>${esc(p.word)}</b> <span class="sub">${esc(p.pron)} ${esc(p.pos)}</span><div>${esc(p.meanings.join(" / "))}</div>${p.note?`<div class="sub">${esc(p.note)}</div>`:""}</div><button class="ad" data-i="${i}" ${has?"disabled":""}>${has?"追加済み":"追加"}</button></div>`}).join("")+
+    return `<div class="card item"><div><b>${esc(p.word)}</b> <span class="sub">${esc(p.pron)} ${esc(p.pos)}</span><div>${esc(p.meanings.join(" / "))}</div>${p.note?`<div class="sub">${esc(p.note)}</div>`:""}</div><button class="${has?"g un":"ad"}" data-i="${i}">${has?"取り消し":"追加"}</button></div>`}).join("")+
   `<button class="g" id="all" style="width:100%">すべて追加</button>`;
   document.querySelectorAll(".ad").forEach(b=>b.onclick=()=>{addItem(s.items[+b.dataset.i]);save();updBadge();renderSent()});
+  document.querySelectorAll(".un").forEach(b=>b.onclick=()=>{removeWord(s.items[+b.dataset.i].word);renderSent()});
   $("#all").onclick=()=>{s.items.forEach(addItem);save();updBadge();renderSent()};
 }
 window.handleText=t=>{
