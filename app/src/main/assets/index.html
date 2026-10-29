@@ -17,7 +17,7 @@ main{max-width:560px;margin:0 auto;padding:16px}
 h1{font-size:20px;margin:4px 0 14px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
 .row{display:flex;gap:8px}
-input{flex:1;min-width:0;font:inherit;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+input,textarea{flex:1;min-width:0;font:inherit;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
 button{font:inherit;border:0;border-radius:10px;padding:12px 16px;background:var(--ac);color:var(--acx);font-weight:600}
 button.g{background:transparent;color:var(--ac);border:1px solid var(--bd)}
 button:disabled{opacity:.5}
@@ -42,6 +42,9 @@ nav button.on{color:var(--ac)}
 <section id="v-search">
 <h1>単語を調べる</h1>
 <div class="card"><div class="row"><input id="q" placeholder="英単語を入力(例: resilient)" autocapitalize="none" autocomplete="off" spellcheck="false"><button id="go">調べる</button></div></div>
+<div class="card"><div class="sub">英文を入力すると、句ごとに分けて意味を表示します</div>
+<textarea id="txt" rows="3" placeholder="例: She decided to give up smoking for her health." style="width:100%;margin:8px 0;font:inherit;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)"></textarea>
+<button id="sb" style="width:100%">句に分ける</button></div>
 <div id="res"></div>
 </section>
 <section id="v-list" class="hide"><h1>単語帳</h1><div id="list"></div></section>
@@ -157,9 +160,41 @@ function rate(r){
 }
 $("#sv").onclick=()=>{try{localStorage.setItem("tango.cfg",JSON.stringify({key:$("#key").value.trim(),model:$("#mdl").value.trim()}));$("#svm").textContent="保存しました"}catch(e){$("#svm").textContent="保存に失敗しました"}};
 $("#tn").onclick=()=>{try{window.Android?Android.test():alert("通知はアプリ版で使えます")}catch(e){}};
+let sent=null;
+async function analyze(text){
+  text=text.trim();if(!text)return;
+  const res=$("#res"),btn=$("#sb");
+  btn.disabled=true;res.innerHTML='<div class="card sub">分析しています…</div>';
+  try{
+    const r=await gem(`次の英文を意味のまとまり(句)ごとに順番に分割し、日本語で解説してください。JSONのみ。形式: {"translation":"全文の日本語訳","phrases":[{"text":"英語の句(原文のまま)","pos":"品詞または種類(日本語)","meanings":["意味"],"note":"補足(任意)"}]}。冠詞だけなど意味の薄い語は前後の句に含め、熟語や句動詞は1つの句として扱ってください。\n英文: ${text}`);
+    sent={text,tr:r.translation||"",items:(r.phrases||[]).map(p=>({word:String(p.text||"").trim().toLowerCase(),pron:"",pos:p.pos||"",meanings:(p.meanings||[]).slice(0,3),example:text,example_ja:r.translation||"",note:p.note||""})).filter(p=>p.word)};
+    renderSent();
+  }catch(e){res.innerHTML=`<div class="card sub">分析に失敗しました(${esc(e.message)})。設定でAPIキーを確認してください。</div>`}
+  btn.disabled=false;
+}
+function addItem(p){
+  if(words.some(w=>w.word===p.word))return;
+  const {note,...r}=p;words.push({...r,stage:0,due:Date.now()+DAY,added:Date.now()});
+}
+function renderSent(){
+  const s=sent;
+  $("#res").innerHTML=`<div class="card"><div>${esc(s.text)}</div><div class="sub">${esc(s.tr)}</div></div>`+
+  s.items.map((p,i)=>{const has=words.some(w=>w.word===p.word);
+    return `<div class="card item"><div><b>${esc(p.word)}</b> <span class="sub">${esc(p.pos)}</span><div>${esc(p.meanings.join(" / "))}</div>${p.note?`<div class="sub">${esc(p.note)}</div>`:""}</div><button class="ad" data-i="${i}" ${has?"disabled":""}>${has?"追加済み":"追加"}</button></div>`}).join("")+
+  `<button class="g" id="all" style="width:100%">すべて追加</button>`;
+  document.querySelectorAll(".ad").forEach(b=>b.onclick=()=>{addItem(s.items[+b.dataset.i]);save();updBadge();renderSent()});
+  $("#all").onclick=()=>{s.items.forEach(addItem);save();updBadge();renderSent()};
+}
+window.handleText=t=>{
+  t=String(t||"").trim();if(!t)return;show("search");
+  if(t.split(/\s+/).length<=3&&!/[.!?;]/.test(t)){$("#q").value=t.replace(/^[^A-Za-z]+|[^A-Za-z]+$/g,"");lookup()}
+  else{$("#txt").value=t;analyze(t)}
+};
+$("#sb").onclick=()=>analyze($("#txt").value);
 $("#go").onclick=lookup;
 $("#q").addEventListener("keydown",e=>{if(e.key==="Enter")lookup()});
 load();updBadge();save();
+try{if(window.Android&&Android.pending){const p=Android.pending();if(p)handleText(p)}}catch(e){}
 </script>
 </body>
 </html>
