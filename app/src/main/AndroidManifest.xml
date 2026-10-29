@@ -3,11 +3,19 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application android:label="単語ノート" android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" android:allowBackup="true">
-        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity-alias android:name=".ProcessTextAlias" android:targetActivity=".MainActivity"
+            android:label="単語ノートで調べる" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
     </application>
 </manifest>
