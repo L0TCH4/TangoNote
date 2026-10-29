@@ -166,8 +166,8 @@ async function analyze(text){
   const res=$("#res"),btn=$("#sb");
   btn.disabled=true;res.innerHTML='<div class="card sub">分析しています…</div>';
   try{
-    const r=await gem(`次の英文を意味のまとまり(句)ごとに順番に分割し、日本語で解説してください。JSONのみ。形式: {"translation":"全文の日本語訳","phrases":[{"text":"英語の句(原文のまま)","pos":"品詞または種類(日本語)","meanings":["意味"],"note":"補足(任意)"}]}。冠詞だけなど意味の薄い語は前後の句に含め、熟語や句動詞は1つの句として扱ってください。\n英文: ${text}`);
-    sent={text,tr:r.translation||"",items:(r.phrases||[]).map(p=>({word:String(p.text||"").trim().toLowerCase(),pron:"",pos:p.pos||"",meanings:(p.meanings||[]).slice(0,3),example:text,example_ja:r.translation||"",note:p.note||""})).filter(p=>p.word)};
+    const r=await gem(`次の英文を単語ごとに順番に分割し、日本語で解説してください。JSONのみ。形式: {"translation":"全文の日本語訳","phrases":[{"text":"英語の単語(原文のまま)","pron":"句全体のIPA発音記号(スラッシュ付き)","pos":"品詞または種類(日本語)","meanings":["意味"],"note":"補足(任意)"}]}。ただし、熟語や句動詞は1つの句として扱い、働きの弱い前置詞(in,at,ofなど)や冠詞などは前後の語とまとめて(in the boxやthousands ofなど)1つの句としてください。\n英文: ${text}`);
+    sent={text,tr:r.translation||"",items:(r.phrases||[]).map(p=>({word:String(p.text||"").trim().toLowerCase(),pron:p.pron||"",pos:p.pos||"",meanings:(p.meanings||[]).slice(0,3),example:text,example_ja:r.translation||"",note:p.note||""})).filter(p=>p.word)};
     renderSent();
   }catch(e){res.innerHTML=`<div class="card sub">分析に失敗しました(${esc(e.message)})。設定でAPIキーを確認してください。</div>`}
   btn.disabled=false;
@@ -180,7 +180,7 @@ function renderSent(){
   const s=sent;
   $("#res").innerHTML=`<div class="card"><div>${esc(s.text)}</div><div class="sub">${esc(s.tr)}</div></div>`+
   s.items.map((p,i)=>{const has=words.some(w=>w.word===p.word);
-    return `<div class="card item"><div><b>${esc(p.word)}</b> <span class="sub">${esc(p.pos)}</span><div>${esc(p.meanings.join(" / "))}</div>${p.note?`<div class="sub">${esc(p.note)}</div>`:""}</div><button class="ad" data-i="${i}" ${has?"disabled":""}>${has?"追加済み":"追加"}</button></div>`}).join("")+
+    return `<div class="card item"><div><b>${esc(p.word)}</b> <span class="sub">${esc(p.pron)} ${esc(p.pos)}</span><div>${esc(p.meanings.join(" / "))}</div>${p.note?`<div class="sub">${esc(p.note)}</div>`:""}</div><button class="ad" data-i="${i}" ${has?"disabled":""}>${has?"追加済み":"追加"}</button></div>`}).join("")+
   `<button class="g" id="all" style="width:100%">すべて追加</button>`;
   document.querySelectorAll(".ad").forEach(b=>b.onclick=()=>{addItem(s.items[+b.dataset.i]);save();updBadge();renderSent()});
   $("#all").onclick=()=>{s.items.forEach(addItem);save();updBadge();renderSent()};
