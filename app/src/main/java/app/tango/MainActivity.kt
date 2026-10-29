@@ -1,0 +1,55 @@
+package app.tango
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import android.webkit.*
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.webkit.WebViewAssetLoader
+import androidx.work.*
+import java.util.concurrent.TimeUnit
+
+class MainActivity : AppCompatActivity() {
+    private lateinit var wv: WebView
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        Notifier.ensureChannel(this)
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "reminder", ExistingPeriodicWorkPolicy.UPDATE,
+            PeriodicWorkRequestBuilder<ReminderWorker>(30, TimeUnit.MINUTES).build()
+        )
+
+        val loader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build()
+        wv = WebView(this)
+        setContentView(wv)
+        wv.settings.javaScriptEnabled = true
+        wv.settings.domStorageEnabled = true
+        wv.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(v: WebView, r: WebResourceRequest) = loader.shouldInterceptRequest(r.url)
+        }
+        wv.addJavascriptInterface(Bridge(this), "Android")
+        wv.loadUrl("https://appassets.androidplatform.net/assets/index.html")
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() { if (wv.canGoBack()) wv.goBack() else super.onBackPressed() }
+}
+
+class Bridge(private val ctx: Context) {
+    @JavascriptInterface fun sync(json: String) {
+        ctx.getSharedPreferences("t", 0).edit().putString("due", json).apply()
+    }
+    @JavascriptInterface fun test() { Notifier.show(ctx, 3) }
+}
