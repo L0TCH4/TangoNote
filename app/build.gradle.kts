@@ -2,7 +2,24 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
     namespace = "app.tango"
     compileSdk = 34
-    defaultConfig { applicationId = "app.tango"; minSdk = 24; targetSdk = 34; versionCode = 1; versionName = "1.0" }
+    defaultConfig {
+        applicationId = "app.tango"; minSdk = 24; targetSdk = 34
+        // GitHub Actionsの実行番号を使い、ビルドごとにバージョンを上げる(上書き更新に必要)
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+        versionName = "1.$versionCode"
+    }
+    signingConfigs {
+        create("fixed") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android"
+        }
+    }
+    buildTypes {
+        getByName("debug") {
+            // 毎回同じ署名にして、アンインストールなしで更新できるようにする
+            if (file("debug.keystore").exists()) signingConfig = signingConfigs.getByName("fixed")
+        }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
 }
