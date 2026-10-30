@@ -4,22 +4,26 @@ android {
     compileSdk = 34
     defaultConfig {
         applicationId = "app.tango"; minSdk = 24; targetSdk = 34
-        // GitHub Actionsの実行番号を使い、ビルドごとにバージョンを上げる(上書き更新に必要)
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "1.$versionCode"
     }
     signingConfigs {
-        create("fixed") {
-            storeFile = file("debug.keystore")
-            storePassword = "android"; keyAlias = "androiddebugkey"; keyPassword = "android"
+        create("release") {
+            val path = System.getenv("KEYSTORE_PATH")
+            if (path != null) {
+                storeFile = file(path)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
         }
     }
     buildTypes {
-        getByName("debug") {
-            // 毎回同じ署名にして、アンインストールなしで更新できるようにする
-            if (file("debug.keystore").exists()) signingConfig = signingConfigs.getByName("fixed")
+        getByName("release") {
+            if (System.getenv("KEYSTORE_PATH") != null) signingConfig = signingConfigs.getByName("release")
         }
     }
+    lint { checkReleaseBuilds = false }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
 }
