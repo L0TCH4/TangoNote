@@ -1,5 +1,10 @@
 name: Build APK
-on: [push, workflow_dispatch]
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,8 +19,23 @@ jobs:
           gradle-version: "8.9"
       - name: Accept Android licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-      - run: gradle assembleDebug --stacktrace
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.keystore"
+      - name: Build signed APK
+        run: gradle assembleRelease --stacktrace
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk TangoNote.apk
       - uses: actions/upload-artifact@v4
         with:
           name: TangoNote-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: TangoNote.apk
+      - name: Attach APK to the release
+        if: github.event_name == 'release'
+        run: gh release upload "${{ github.event.release.tag_name }}" TangoNote.apk --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
