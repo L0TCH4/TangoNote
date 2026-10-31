@@ -99,7 +99,10 @@ function show(t){
   if(t==="set")renderSet();if(t==="list")renderList();if(t==="rev"){revCard=null;renderRev()}
 }
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>show(b.dataset.t));
-function speak(t){try{const u=new SpeechSynthesisUtterance(t);u.lang="en-US";speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){}}
+function speak(t){
+  try{if(window.Android&&Android.speak){Android.speak(String(t));return}}catch(e){}
+  try{const u=new SpeechSynthesisUtterance(t);u.lang="en-US";speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){}
+}
 
 async function lookup(){
   const w=$("#q").value.trim().toLowerCase();
