@@ -8,6 +8,8 @@ import org.json.JSONObject
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import android.webkit.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -18,6 +20,7 @@ import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
     private lateinit var wv: WebView
+    private var tts: TextToSpeech? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,6 +38,7 @@ class MainActivity : AppCompatActivity() {
 
         val loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build()
+        tts = TextToSpeech(this) { st -> if (st == TextToSpeech.SUCCESS) tts?.setLanguage(Locale.US) }
         wv = WebView(this)
         setContentView(wv)
         wv.settings.javaScriptEnabled = true
@@ -42,8 +46,13 @@ class MainActivity : AppCompatActivity() {
         wv.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(v: WebView, r: WebResourceRequest) = loader.shouldInterceptRequest(r.url)
         }
-        wv.addJavascriptInterface(Bridge(this), "Android")
+        wv.addJavascriptInterface(Bridge(this) { text -> tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tango") }, "Android")
         wv.loadUrl("https://appassets.androidplatform.net/assets/index.html")
+    }
+
+    override fun onDestroy() {
+        tts?.shutdown()
+        super.onDestroy()
     }
 
     private fun selectedText(i: Intent?): String? =
@@ -61,7 +70,8 @@ class MainActivity : AppCompatActivity() {
     override fun onBackPressed() { if (wv.canGoBack()) wv.goBack() else super.onBackPressed() }
 }
 
-class Bridge(private val ctx: Context) {
+class Bridge(private val ctx: Context, private val speaker: (String) -> Unit) {
+    @JavascriptInterface fun speak(t: String) { speaker(t) }
     companion object { @Volatile var pending: String? = null }
     @JavascriptInterface fun pending(): String { val p = pending ?: ""; pending = null; return p }
     @JavascriptInterface fun sync(json: String) {
